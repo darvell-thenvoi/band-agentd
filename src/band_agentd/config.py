@@ -115,7 +115,10 @@ def load_config(path: str | Path) -> DaemonConfig:
     if not config_path.is_file():
         raise FileNotFoundError(f"Config file does not exist: {config_path}")
 
-    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    try:
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{config_path} is not valid YAML: {exc}") from exc
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):

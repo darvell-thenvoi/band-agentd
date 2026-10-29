@@ -160,7 +160,21 @@ def test_invalid_settings_change_keeps_the_agent_running(tmp_path):
         config_path.write_text("runtime:\n  adapter: nonsense\n", encoding="utf-8")
         await asyncio.sleep(0.1)
         assert not watcher.done()
+        config_path.write_text("agent: {}\nruntime: [broken\n", encoding="utf-8")
+        await asyncio.sleep(0.1)
+        assert not watcher.done()
         config_path.write_text("runtime:\n  adapter: claude\n", encoding="utf-8")
         await asyncio.wait_for(watcher, timeout=0.5)
 
     asyncio.run(exercise())
+
+
+def test_restart_keeps_previous_settings_when_the_file_is_broken(tmp_path):
+    config_path = tmp_path / "agent.yaml"
+    config_path.write_text("runtime: [broken\n", encoding="utf-8")
+    config = DaemonConfig.model_validate({"runtime": {"cwd": str(tmp_path)}})
+    daemon = AgentDaemon(config, config_path=config_path)
+
+    daemon._refresh_config()
+
+    assert daemon.config is config

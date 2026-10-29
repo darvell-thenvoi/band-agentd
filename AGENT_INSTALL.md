@@ -90,11 +90,13 @@ For Codex, suggest `gpt-6.1-sol` with `medium` when the list has it. Otherwise, 
 ### Q4. How much freedom?
 
 > How much should it be allowed to do on this machine?
-> 1. **Full access** (suggested): runs any command and edits any file without asking. Best for a machine dedicated to the agent.
-> 2. **Ask first**: works freely in its own folder and asks in the Band room before anything else, like installing packages or committing.
-> 3. **Read only**: reads and answers questions, but changes nothing.
+> - **Full access** (suggested): runs any command and edits any file without asking. Best for a machine dedicated to the agent.
+> - **Ask first**: works freely in its own folder and asks in the Band room before anything else, like installing packages or committing.
+> - **Read only**: reads and answers questions, but changes nothing.
+>
+> Reply "full access", "ask first", or "read only".
 
-For Claude, describe **Ask first** as "asks in the Band room before every action, including reading files", because that is how Claude's approvals work. Map the answer to `--access full`, `--access ask`, or `--access read-only`.
+Use bullets, not numbers: in Codex, a typed digit can be captured by a Codex notice instead of reaching you. For Claude, describe **Ask first** as "asks in the Band room before every action, including reading files", because that is how Claude's approvals work. Map the answer to `--access full`, `--access ask`, or `--access read-only`.
 
 ### Q5. Create the agent on Band
 
@@ -143,7 +145,7 @@ export PATH="$HOME/.local/bin:$PATH"; sleep 10; systemctl --user is-active <serv
 
 ## Part 4: Wrap up
 
-Tell the user, briefly:
+Send this message in full, filling in the values. Every paragraph is needed later, so don't shorten it:
 
 > **<name>** is live on Band. To use it, open or create a room at app.band.ai, add <name>, and @mention it with what you need. It only responds when it is mentioned, and it can work in several rooms at once, all in `<working folder>`.
 >
