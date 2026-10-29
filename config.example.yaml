@@ -1,0 +1,86 @@
+# band-agentd configuration
+#
+# `band-agentd install` writes this file to ~/.config/band-agentd/<unit>.yaml
+# with mode 0600. One file is one Band agent; install one unit per agent to run
+# several agents on the same machine.
+#
+# Saving this file restarts the agent within `reload_interval_s` seconds. A
+# file that fails to parse is logged and retried until it is valid; the agent
+# stays stopped until then.
+
+agent:
+  # The ID and API Key shown on https://app.band.ai/agents/create after
+  # "Connect Agent". The key is shown once; a lost key is replaced from the
+  # agent's menu on the website. Never put a user key (band_u_/thnv_u_) here.
+  id: 6f1c2c1e-6a3b-4c38-9d47-0b3d2f8a91aa
+  api_key: REPLACE_WITH_AGENT_API_KEY
+  # For your reference only. Band shows the name and description you entered
+  # on the website.
+  name: Build Box Coder
+  description: Coding agent for the payments repository on build-box.
+
+runtime:
+  # codex or claude. Codex uses the machine's `codex` CLI and its login.
+  # Claude uses the Claude Code CLI bundled with band-agentd and its login.
+  adapter: codex
+
+  # Repository or directory the agent works in. Inside a git repository, each
+  # room gets its own worktree on branch band/<room-id> under
+  # ~/.local/share/band-agentd/worktrees/. Outside git, each room gets an empty
+  # directory <cwd>/<room-id>.
+  cwd: /home/op/src/payments
+
+  # true removes all approval prompts: Codex runs with danger-full-access,
+  # Claude with bypassPermissions. Only on machines the agent may fully control.
+  yolo: false
+
+  # Extra instructions added to the agent's system prompt, such as its role.
+  # Use either the inline text or a file; edits to the file also restart the agent.
+  instructions: |
+    You own the payments service. Run the tests before reporting a change as done.
+  instructions_file: null
+
+  # Model id from `band-agentd models --adapter <codex|claude>`, which lists what
+  # this machine's login offers. null uses the runtime's default model.
+  model: null
+
+  # Reasoning level for that model, also listed by `band-agentd models`, such
+  # as low, medium, high, xhigh, or max. null uses the model's default.
+  reasoning_effort: null
+
+  # What happens to approval requests when yolo is false:
+  #   manual       - post the request in the room; reply /approve <id> or /decline <id>
+  #   auto_accept  - approve automatically and note it in the room
+  #   auto_decline - decline automatically
+  # Codex only asks for actions outside its sandbox. Claude asks for every
+  # native tool call, including file reads, so auto_accept suits trusted hosts.
+  approval_mode: manual
+
+  # Codex only. null means workspace-write (or danger-full-access with yolo).
+  # Other values: read-only, workspace-write, danger-full-access.
+  sandbox: null
+
+  # Claude only, when yolo is false: default, acceptEdits, plan, auto.
+  permission_mode: acceptEdits
+
+  # Claude only. Extended-thinking token budget; null disables it.
+  max_thinking_tokens: null
+
+  # What the room shows while the agent works.
+  emit_tool_calls: true
+  emit_thoughts: true
+  emit_tasks: true   # Codex only
+  emit_usage: true
+
+restart:
+  # Reconnect after a crash or lost connection, backing off from
+  # initial_delay_s to max_delay_s.
+  enabled: true
+  initial_delay_s: 2
+  max_delay_s: 60
+
+# Seconds a running turn gets to finish when the service stops or reloads.
+shutdown_timeout_s: 30
+
+# How often the daemon checks this file and instructions_file for changes.
+reload_interval_s: 1
