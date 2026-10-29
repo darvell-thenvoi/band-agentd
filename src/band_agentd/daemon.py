@@ -110,9 +110,13 @@ def build_adapter(config: DaemonConfig) -> Any:
         else ClaudePermissionMode(runtime.permission_mode)
     )
     # Room approvals route every native tool call, reads included, through
-    # the room. Plan mode is already read-only, so it needs none.
+    # the room, so declining them all would also block reading. Read-only
+    # (auto_decline) instead relies on the CLI's default permission mode:
+    # reads need no permission, and with no approval handler, edits and
+    # shell commands are refused. Plan mode is not used because it also
+    # blocks band_send_message, so the agent could not reply.
     approvals = None
-    if not runtime.yolo and permission_mode is not ClaudePermissionMode.PLAN:
+    if not runtime.yolo and approval_mode != "auto_decline":
         approvals = ClaudeApprovalOptions(mode=approval_mode)
 
     from band.core.types import Emit

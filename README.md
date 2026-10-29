@@ -100,7 +100,7 @@ For separate checkouts, set `workspace: worktree` (or install with `--workspace 
 | --- | --- | --- |
 | Full access (`yolo: true`) | `danger-full-access`, no prompts | `bypassPermissions`, no prompts |
 | Ask first | `workspace-write` sandbox: works freely in its working folder and asks in the room before anything outside it, such as network access or writing to `.git` | Asks in the room before every native tool call, including file reads |
-| Read only | `read-only` sandbox, requests declined | `plan` mode |
+| Read only | `read-only` sandbox, requests declined | `default` permission mode with no approvals: reads files, refuses edits and shell commands |
 
 Approval requests appear in the room. Reply `/approve <id>` or `/decline <id>`. Codex also accepts `/approve-session <id>` to allow similar requests for the rest of the session. Unanswered requests are declined after 5 minutes. Full access is meant for a machine where the agent may run any command as the service user.
 

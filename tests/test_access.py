@@ -58,7 +58,7 @@ def test_codex_access_levels(tmp_path, monkeypatch, access, sandbox, approval_po
     [
         ("full", "bypassPermissions", None),
         ("ask", "acceptEdits", "manual"),
-        ("read-only", "plan", None),
+        ("read-only", "default", None),
     ],
 )
 def test_claude_access_levels(tmp_path, monkeypatch, access, permission_mode, approvals):

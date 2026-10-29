@@ -55,7 +55,7 @@ ACCESS_SETTINGS: dict[Access, dict[str, Any]] = {
         "yolo": False,
         "approval_mode": "auto_decline",
         "sandbox": "read-only",
-        "permission_mode": "plan",
+        "permission_mode": "default",
     },
 }
 

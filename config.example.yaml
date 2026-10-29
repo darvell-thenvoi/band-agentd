@@ -38,7 +38,7 @@ runtime:
   #   full access - yolo: true
   #   ask first   - yolo: false, approval_mode: manual (the values below)
   #   read only   - yolo: false, approval_mode: auto_decline, sandbox: read-only,
-  #                 permission_mode: plan
+  #                 permission_mode: default
   # true removes all approval prompts: Codex runs with danger-full-access,
   # Claude with bypassPermissions. Only on machines the agent may fully control.
   yolo: false
@@ -69,8 +69,9 @@ runtime:
   # Other values: read-only, workspace-write, danger-full-access.
   sandbox: null
 
-  # Claude only, when yolo is false: default, acceptEdits, plan, auto.
-  # plan is read only and needs no approvals.
+  # Claude only, when yolo is false: default, acceptEdits, or auto. With
+  # approval_mode auto_decline, default reads files and refuses edits and shell
+  # commands. Avoid plan: it also blocks the tool the agent replies with.
   permission_mode: acceptEdits
 
   # Claude only. Extended-thinking token budget; null disables it.
