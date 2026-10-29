@@ -13,6 +13,17 @@ from .workspaces import SharedWorkspace, WorkspaceMode, room_worktree_resolver
 
 logger = logging.getLogger(__name__)
 
+# Codex decides on its own whether a sandbox-blocked command is worth an
+# approval request, and it sometimes reports the block as a failure instead.
+# In ask-first mode the room is there to approve, so the agent is told to ask.
+CODEX_ESCALATION_GUIDANCE = (
+    "You run in a sandbox, and the people in this room approve anything outside it. "
+    "When a command fails because the sandbox blocks it, for example a read-only "
+    "file system, writing to .git, or no network access, rerun it with escalated "
+    "permissions and a short justification so they can approve it. Do not report a "
+    "sandbox block as a failure without asking first."
+)
+
 
 def _share_workspace(adapter: Any, cwd: Path) -> None:
     """Let all of a Codex agent's rooms work in ``cwd``.
@@ -58,6 +69,11 @@ def build_adapter(config: DaemonConfig) -> Any:
 
     if runtime.adapter == "codex":
         from band.adapters.codex import CodexAdapter, CodexAdapterConfig
+
+        if not runtime.yolo and approval_mode == "manual":
+            instructions = "\n\n".join(
+                part for part in (CODEX_ESCALATION_GUIDANCE, instructions) if part
+            )
 
         # "never" stops Codex from asking at all, so room approvals only work
         # when Codex is allowed to request escalation ("on-request").

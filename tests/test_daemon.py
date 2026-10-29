@@ -59,7 +59,7 @@ def test_worktree_mode_gives_rooms_their_own_checkout(tmp_path, monkeypatch, ada
 
 def test_codex_default_routes_escalations_to_room_approvals(tmp_path):
     config = DaemonConfig.model_validate(
-        {"runtime": {"adapter": "codex", "cwd": str(tmp_path)}}
+        {"runtime": {"adapter": "codex", "cwd": str(tmp_path), "instructions": "Own the repo."}}
     )
 
     adapter = build_adapter(config)
@@ -67,6 +67,16 @@ def test_codex_default_routes_escalations_to_room_approvals(tmp_path):
     assert adapter.config.approval_mode == "manual"
     assert adapter.config.approval_policy == "on-request"
     assert adapter.config.sandbox == "workspace-write"
+    assert "escalated permissions" in adapter.config.custom_section
+    assert adapter.config.custom_section.endswith("Own the repo.")
+
+
+def test_codex_full_access_gets_no_escalation_guidance(tmp_path):
+    config = DaemonConfig.model_validate(
+        {"runtime": {"adapter": "codex", "cwd": str(tmp_path), "yolo": True}}
+    )
+
+    assert "escalated" not in build_adapter(config).config.custom_section
 
 
 def test_file_watcher_notices_instruction_changes(tmp_path):
