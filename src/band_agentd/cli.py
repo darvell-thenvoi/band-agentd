@@ -24,6 +24,7 @@ from .service import (
     install_systemd_service,
     remove_systemd_service,
     render_systemd_unit,
+    require_systemd,
 )
 from .workspaces import WorkspaceMode, worktree_repo
 
@@ -273,6 +274,8 @@ def _install(args: argparse.Namespace) -> None:
     if adapter not in ADAPTERS:
         raise ValueError("Agent type must be codex or claude")
     _check_unit_name(args.unit)
+    if ServiceMode(args.service) is ServiceMode.SYSTEMD:
+        require_systemd()
 
     cwd = Path(_value(str(args.cwd) if args.cwd else None, "Working directory", "--cwd"))
     cwd = cwd.expanduser().resolve()

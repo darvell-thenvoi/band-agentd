@@ -104,17 +104,21 @@ def _ensure_linger() -> str | None:
     )
 
 
+def require_systemd() -> None:
+    if shutil.which("systemctl") is None:
+        raise RuntimeError(
+            "systemd is not available on this machine. Rerun install with "
+            "--service none and start the daemon with `band-agentd run`."
+        )
+
+
 def install_systemd_service(
     config_path: str | Path,
     *,
     unit_name: str,
     scope: ServiceScope,
 ) -> tuple[Path, str | None]:
-    if shutil.which("systemctl") is None:
-        raise RuntimeError(
-            "systemd is not available on this machine. Rerun install with "
-            "--service none and start the daemon with `band-agentd run`."
-        )
+    require_systemd()
 
     path = unit_path(unit_name, scope)
     path.parent.mkdir(parents=True, exist_ok=True)

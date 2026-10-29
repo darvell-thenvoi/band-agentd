@@ -49,7 +49,7 @@ def test_install_runs_without_a_terminal_and_keeps_the_key_private(
 def test_install_without_terminal_names_the_missing_flag(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
-    result = main(["install", "--adapter", "codex", "--cwd", str(tmp_path)])
+    result = main(["install", "--adapter", "codex", "--cwd", str(tmp_path), "--service", "none"])
 
     assert result == 2
     assert "--agent-id is required" in capsys.readouterr().err
@@ -93,6 +93,17 @@ def test_install_checks_worktree_mode_before_writing(tmp_path, monkeypatch, caps
 
     assert main(install_args(tmp_path, "--skip-checks", "--workspace", "worktree")) == 2
     assert "needs a git repository" in capsys.readouterr().err
+    assert not (tmp_path / "conf" / "agent.yaml").exists()
+
+
+def test_install_without_systemd_fails_before_writing(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO("agent-secret-key\n"))
+    monkeypatch.setattr("band_agentd.service.shutil.which", lambda _name: None)
+    args = install_args(tmp_path, "--skip-checks")
+    args[args.index("none")] = "systemd"
+
+    assert main(args) == 2
+    assert "--service none" in capsys.readouterr().err
     assert not (tmp_path / "conf" / "agent.yaml").exists()
 
 
