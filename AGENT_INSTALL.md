@@ -1,39 +1,43 @@
-# Installing band-agentd (instructions for coding agents)
+# Setting up Band agents (instructions for coding agents)
 
-Follow this runbook when an operator asks you to set up Band agents on this machine. Each Band agent ends up running as its own systemd service, backed by Codex or Claude, with its credentials in an owner-only config file. One machine can run any number of agents.
+Use this when the user asks you to set up Band agents on this machine. Through a short conversation, you install band-agentd and connect a Band agent that runs on Codex or Claude, then leave it running as a service. You do all the technical work. The user answers a few plain questions and creates the agent on the Band website.
 
-## Rules
+## How to talk to the user
 
-- Each shell command may run in a fresh shell with no terminal attached. Start every command with `export PATH="$HOME/.local/bin:$PATH";` and never run anything that waits for keyboard input.
-- Follow the steps in order. In each message to the operator, ask only what the current step needs. Never ask for an agent ID or API key before step 6, where the operator first gets the name and description to create the agent with.
-- Do the installation yourself. Never hand the operator these commands to run in another terminal. The only commands the operator runs are sign-ins (step 4) and, when step 7 says so, `sudo loginctl enable-linger`.
-- Never print, echo, log, or commit an agent API key after the operator gives it to you. Pass it to the installer only through stdin, as shown in step 7.
-- Do not ask for a human or user API key. Agent API keys come from the Band website.
-- Configuration fields are documented in `config.example.yaml` in this repository. Read it before answering configuration questions.
+- Ask one question per message, in plain words. Say "agent", "Codex", "Claude", and "model". Never say "unit", "adapter", "runtime", "systemd", or "config" unless the user asks how something works.
+- Put a suggested answer in every question, so the user can reply "yes" or "sounds good".
+- Work silently between questions. Mention a problem only when you need the user to act on it.
+- The only commands you hand the user are a sign-in command (Q1) and, if the installer asks for it, one `sudo loginctl enable-linger` command. Run everything else yourself.
+- Never repeat, print, or log the agent API key once the user gives it to you.
+- Never ask for a user or human API key. Only the agent API key from the Band website is needed.
 
-## 0. Get write access outside this folder
+## Shell rules
 
-The install writes to `~/.local`, `~/.cache`, `~/.config`, and systemd, and it downloads packages. Confirm that you can:
+- Each command may run in a fresh shell with no terminal. Start every command with `export PATH="$HOME/.local/bin:$PATH";`. Never run anything that waits for keyboard input.
+- When a command fails, read the error, fix the cause, and run it again. The installer's error messages name the fix.
+- `config.example.yaml` in this repository explains every setting.
 
-```bash
-export PATH="$HOME/.local/bin:$PATH"; mkdir -p "$HOME/.local/share" "$HOME/.cache" "$HOME/.config" && touch "$HOME/.local/share/.band-agentd-probe" "$HOME/.cache/.band-agentd-probe" && rm "$HOME/.local/share/.band-agentd-probe" "$HOME/.cache/.band-agentd-probe" && curl -fsS -o /dev/null https://github.com && echo access-ok
-```
+## Part 1: Prepare the machine (no questions)
 
-If `access-ok` does not print, rerun the same command with escalated permissions; in Codex, that sends the operator an approval request. If escalation is unavailable or refused, stop and send the operator exactly this:
-
-> The install needs to write outside this folder and use the network. In Codex, type `/permissions`, choose **Full Access**, and tell me to continue. In Claude Code, approve the commands when asked.
-
-Do not continue to step 1 until `access-ok` prints.
-
-## 1. Check the machine
+**Access.** The install writes outside the current folder and downloads packages:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"; uname -s; id -un; id -u; command -v git curl systemctl; command -v codex claude; [ "$(id -u)" = 0 ] || (systemctl --user show-environment >/dev/null 2>&1 && echo user-systemd-ok)
+export PATH="$HOME/.local/bin:$PATH"; mkdir -p "$HOME/.local/share" "$HOME/.cache" "$HOME/.config" && d1=$(mktemp -d -p "$HOME/.local/share") && d2=$(mktemp -d -p "$HOME/.cache") && rmdir "$d1" "$d2" && curl -fsS -o /dev/null https://github.com && echo access-ok
 ```
 
-Continue only on Linux with `git`, `curl`, and `systemctl`. When `id -u` is not `0`, `user-systemd-ok` must also appear. If systemd is missing, install with `--service none` and tell the operator that each agent must then be started with `band-agentd run`.
+If `access-ok` does not print, run it again with escalated permissions. If you cannot escalate, or the request is refused, send the user this and wait:
 
-## 2. Install uv and band-agentd
+> I need permission to install outside this folder and use the network. In Codex, type `/permissions`, choose **Ask for approval**, and tell me to continue. I'll ask before each step. In Claude Code, approve the commands as they come up.
+
+**Machine check.**
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"; uname -s; id -u; command -v git curl systemctl; command -v codex; [ "$(id -u)" = 0 ] || (systemctl --user show-environment >/dev/null 2>&1 && echo user-systemd-ok)
+```
+
+You need Linux with `git`, `curl`, and `systemctl`. When the user is not root (`id -u` is not `0`), `user-systemd-ok` must also print. Without systemd, add `--service none` to the install command in Part 3, and tell the user that the agent runs only while `band-agentd run` is running.
+
+**Install band-agentd.**
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"; command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -43,109 +47,106 @@ export PATH="$HOME/.local/bin:$PATH"; command -v uv >/dev/null || curl -LsSf htt
 export PATH="$HOME/.local/bin:$PATH"; SRC="$HOME/.local/share/band-agentd/src"; if [ -d "$SRC/.git" ]; then git -C "$SRC" pull --ff-only; else git clone https://github.com/darvell-thenvoi/band-agentd "$SRC"; fi; uv tool install --force "${SRC}[codex,claude]" && band-agentd --help >/dev/null && echo band-agentd-ok
 ```
 
-Keep the braces in `"${SRC}[codex,claude]"`. Without them, zsh reads `[codex,claude]` as an array subscript. A copy you cloned elsewhere to read this file can stay where it is; band-agentd installs from this one.
+Keep the braces in `"${SRC}[codex,claude]"`, because zsh would otherwise read `[codex,claude]` as an array subscript. A copy cloned elsewhere to read this file can stay where it is.
 
-## 3. Ask which agents to create
+## Part 2: The conversation
 
-Ask the operator in one message. Do not ask for an ID or API key yet. Offer an example, such as "one Codex agent working on `~/src/api`":
+### Q1. Codex or Claude?
 
-1. **How many agents**, and for each one:
-   - **Runtime:** `codex` or `claude`. Recommend the runtime the operator is using with you right now, because it is already installed and signed in on this machine.
-   - **Working directory:** the repository or directory it works in.
-   - **Role** (optional): one or two sentences about what it is responsible for. This becomes the agent's instructions.
-2. **YOLO mode:** yes or no, for all agents or per agent. Default to no. YOLO removes every approval prompt and lets the agent run any command as this user.
+> band-agentd is installed. Want to set up a Band agent now? It can run on **Codex** or **Claude**. You're using Codex right now, so Codex is ready to go. Which one?
 
-Check that every working directory exists.
+Adjust the last sentence to match the tool the user is talking to you through. If they don't want an agent now, say that they can ask you to set one up any time, and stop.
 
-## 4. Make sure each runtime in use is signed in
+Then check the choice yourself:
 
-Codex:
+- **Codex:** `command -v codex && codex login status`. If `codex` is missing, install it with `npm install -g @openai/codex`. If it is not signed in, ask the user to run `codex login --device-auth` in another terminal on this machine and tell you when it's done.
+- **Claude:** the Claude CLI comes with band-agentd. `band-agentd models --adapter claude` in Q3 reports whether it is signed in. If it isn't, give the user the sign-in command from the error and wait.
 
-```bash
-export PATH="$HOME/.local/bin:$PATH"; command -v codex && codex login status
-```
+### Q2. Name and job
 
-If `codex` is missing, install it with `npm install -g @openai/codex`. If `codex login status` fails, ask the operator to run `codex login --device-auth` in their own terminal on this machine, then wait for them to confirm.
+> What should we call your agent, and what will it do? For example: "Payments Helper: fixes bugs and reviews changes in the payments repo."
 
-Claude: the Claude Code CLI ships inside band-agentd, so nothing needs installing. Step 5 reports whether it is signed in. If it is not, give the operator the sign-in command from the error message.
+From the answer, work out:
 
-## 5. Choose a model and reasoning level for each agent
+- **Name** for Band: 3 to 24 characters, using only letters, numbers, and spaces. If theirs doesn't fit, shorten it and mention the change.
+- **Description** for Band: one sentence, at least 10 characters, saying what the agent does.
+- **Instructions:** the job, in their words, written as instructions to the agent.
+- **Working folder:** the repository or folder it works in. If the user named a project, look for it, for example with `find ~ /srv /opt -maxdepth 3 -name .git -type d 2>/dev/null`, and confirm the match in one line. If they named nothing, ask once: "Which folder should it work in? I'd suggest `<path>`." Suggest the current folder if it is a git repository.
+- **Service name**, which you keep to yourself: the agent name in lowercase with hyphens, for example `payments-helper`. Add a number if `~/.config/band-agentd/<name>.yaml` already exists.
 
-List what this machine's login offers, once for each runtime in use:
+### Q3. Model
 
-```bash
-export PATH="$HOME/.local/bin:$PATH"; band-agentd models --adapter codex
-```
+List the models this machine's login offers:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"; band-agentd models --adapter claude
+export PATH="$HOME/.local/bin:$PATH"; band-agentd models --adapter <codex|claude>
 ```
 
-Show the operator the list as printed: each model id, its description, and its reasoning levels, with `*` marking the default. Ask for each agent's model and reasoning level, and offer the default model at its default level as the choice when they have no preference. Use only ids and levels from the list. Add `--json` for machine-readable output.
+> Which model should it use? I'd go with **gpt-6.1-sol** on **medium** reasoning. Here's what's available:
+> (each model on one line: id, short description, reasoning levels)
 
-Then propose a name and description for each agent:
+For Codex, suggest `gpt-6.1-sol` with `medium` when the list has it. Otherwise, and for Claude, suggest the model marked `*` with `medium`. Accept only models and reasoning levels from the list.
 
-- **Name:** 3 to 24 characters, using only letters, numbers, and spaces, and unique on this machine, for example `Api Coder`.
-- **Description:** at least 10 characters about what the agent does, for example `Coding agent for the api repository on build-box`.
-- **Unit:** the name in lowercase, with hyphens, for example `api-coder`. It names the service and the config file.
+### Q4. Create the agent on Band
 
-## 6. Have the operator create each Band agent
+> Last step on your side: create the agent on Band.
+> 1. Open https://app.band.ai/agents/create
+> 2. **Agent name:** `<name>`
+> 3. **Description:** `<description>`
+> 4. Click **Connect Agent**.
+> 5. Paste the **ID** and **API Key** it shows you here. The key is only shown once.
 
-For each agent, send these steps, filled in with the name and description you proposed:
+The ID is a UUID. If the user pastes a handle such as `@name/agent`, ask for the ID instead. If they lost the key, they can generate a new one from the agent's menu on the website.
 
-1. Open https://app.band.ai/agents/create
-2. **Agent name:** `<name>`
-3. **Description:** `<description>`
-4. Leave **Handle** as generated. **Tag your agent** is optional.
-5. Select **Connect Agent**.
-6. Copy the **ID** and **API Key** from the result and paste both here. The key is shown only once. If it is lost, generate a new one from the agent's menu on the website.
-
-The ID is a UUID. If the operator pastes a handle such as `@name/agent`, ask for the ID instead. You may collect all agents' credentials before installing, or install each agent as its credentials arrive.
-
-## 7. Install each agent
-
-Run this once per agent, filling in its values. Leave out `--instructions` when no role was given, leave out `--model` and `--reasoning-effort` when the operator chose the defaults, and add `--yolo` only when the operator chose it.
+## Part 3: Install and verify (no questions)
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"; printf '%s\n' '<API key>' | band-agentd install \
   --adapter <codex|claude> \
-  --cwd <working directory> \
+  --cwd <working folder> \
   --agent-id <ID> \
   --api-key-stdin \
   --name '<name>' \
   --description '<description>' \
-  --instructions '<role>' \
-  --model <model id> \
+  --instructions '<instructions>' \
+  --model <model> \
   --reasoning-effort <level> \
-  --unit <unit>
+  --unit <service name>
 ```
 
-The installer:
+The installer checks the sign-in, model, and credentials with Band before it writes anything. It saves the settings to `~/.config/band-agentd/<service name>.yaml`, then installs and starts the service. If it fails, fix the cause and rerun the command with `--force` added. If it prints a lingering warning, give the user the `sudo loginctl enable-linger ...` command it shows. Without lingering, the agent stops when the user logs out.
 
-- checks that the runtime is installed and signed in, and that the model and reasoning level are offered
-- verifies the ID and key with Band and prints the agent name Band reports
-- writes `~/.config/band-agentd/<unit>.yaml` with mode `0600`
-- installs and starts a systemd service: a user service when not root, a system service when root
-- records the current `PATH` and `HOME` in the unit, so the service finds the same `codex` binary and logins
-
-If it exits with an error, the message names the fix. Correct the cause and rerun the same command, adding `--force` once a config file exists. If it prints a lingering warning, give the operator the `sudo loginctl enable-linger ...` command it shows. Without lingering, a user service stops when the operator logs out.
-
-## 8. Confirm each agent is connected
+Confirm the agent is online. Leave out `--user` when installed as root:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"; systemctl --user status <unit> --no-pager; journalctl --user -u <unit> -n 40 --no-pager | grep -E 'Agent started|ERROR|Error'
+export PATH="$HOME/.local/bin:$PATH"; sleep 10; systemctl --user is-active <service name>; journalctl --user -u <service name> -n 60 --no-pager | grep -E 'Agent started|ERROR|Error|Traceback'
 ```
 
-Drop `--user` from both commands when installed as root. `Agent started` means the agent is online.
+`active` plus `Agent started` means the agent is online. If not, read the full log with `journalctl --user -u <service name> -n 200 --no-pager`, fix the cause, and restart with `systemctl --user restart <service name>`. Then check again.
 
-## 9. Tell the operator how to use the agents
+| Log shows | Fix |
+| --- | --- |
+| `401` or `rejected the agent API key` | The key was mistyped or replaced. Ask for the key again, or a new one from the agent's menu. |
+| `Codex is not signed in` or `codex: not found` | The service runs as this user. Sign Codex in as this user, then restart. |
+| `runtime.cwd is not a directory` | Fix `runtime.cwd` in the settings file. Saving restarts the agent. |
+| Repeated restarts with a Python traceback | Read the traceback. If it isn't a settings problem, report it with the log lines. |
 
-Send a short summary covering these points:
+## Part 4: Wrap up
 
-- **Start work:** add the agent to a room on app.band.ai and @mention it. An agent wakes only when mentioned. One agent can work in many rooms at once.
-- **Where it works:** in a git repository, each room gets its own worktree on a branch named `band/<room-id>`, so the work shows up as branches in the original repository. Outside git, each room gets its own folder under the working directory.
-- **Approvals** (without YOLO): the agent posts requests in the room. Reply `/approve <id>` or `/decline <id>`. Codex also accepts `/approve-session <id>`.
-- **Changing settings:** edit `~/.config/band-agentd/<unit>.yaml`. Saving restarts that agent automatically. Every field is explained in `~/.local/share/band-agentd/src/config.example.yaml`. Common changes are `runtime.instructions` for the role, `runtime.model` and `runtime.reasoning_effort` (choices from `band-agentd models --adapter <runtime>`), `runtime.yolo`, and `runtime.approval_mode`.
-- **Status and logs:** `systemctl --user status <unit>` and `journalctl --user -u <unit> -f`, without `--user` for a root install.
-- **Adding another agent later:** ask a coding agent on this machine to run this runbook again.
-- **Removing an agent:** `systemctl --user disable --now <unit>`, then delete its config file and unit file.
+Tell the user, briefly:
+
+> **<name>** is live on Band. To use it, open or create a room at app.band.ai, add <name>, and @mention it with what you need. It only responds when it is mentioned, and it can work in several rooms at once.
+>
+> When it needs permission for something, it asks in the room. Reply `/approve <id>` or `/decline <id>`. Each room works on its own git branch named `band/<room-id>`, so you can review its changes like any branch.
+>
+> To change its model, instructions, or anything else, just ask me. I'll update its settings, and it restarts on its own.
+
+For a Claude agent, add: "Claude asks before every action, including reading files. If that gets noisy, I can switch it to approve automatically."
+
+Then ask: "Want to set up another agent?" If yes, go back to Q1.
+
+## Reference for later requests
+
+- Settings file: `~/.config/band-agentd/<service name>.yaml`. Saving it restarts the agent within a second. `config.example.yaml` explains each field. Common changes: `runtime.instructions`, `runtime.model` and `runtime.reasoning_effort` (choices from `band-agentd models`), `runtime.yolo` to remove all approval prompts, and `runtime.approval_mode`.
+- Status and logs: `systemctl --user status <service name>` and `journalctl --user -u <service name> -f`, without `--user` when installed as root.
+- Remove an agent: `systemctl --user disable --now <service name>`, then delete its settings file and `~/.config/systemd/user/<service name>.service` (`/etc/systemd/system/` when root).

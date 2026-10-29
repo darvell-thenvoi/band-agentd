@@ -4,16 +4,21 @@ band-agentd runs Band agents backed by Codex or Claude on a Linux machine, one s
 
 ## Set up agents with a coding agent
 
-SSH into the machine and start `codex` or `claude`. The install writes outside the current folder and uses the network, so in Codex first type `/permissions` and choose **Full Access**; in Claude Code, approve commands as they come. Then paste:
+SSH into the machine and start `codex` or `claude`. In Codex, first type `/permissions` and choose **Ask for approval**. Codex's default mode silently refuses the setup's requests to install packages and write outside the current folder, while this mode asks you before each one. In Claude Code, approve commands as they come up. Then paste:
 
 ```text
 Set up Band agents on this machine. Clone https://github.com/darvell-thenvoi/band-agentd
 and follow AGENT_INSTALL.md in it exactly.
 ```
 
-The agent installs band-agentd and asks which agents you want: how many, Codex or Claude, which directory each works in, an optional role, and whether to use YOLO mode. It then lists the models and reasoning levels your Codex or Claude login offers so you can pick one for each agent. For each agent, it gives you a name and description to enter on https://app.band.ai/agents/create, asks for the ID and API key Band shows you, installs the service, and confirms the agent is online. It finishes by explaining how to use the agents and change their config.
+The agent installs band-agentd, then walks you through a short conversation:
 
-The agent needs network access and writes outside its folder. If it is blocked anyway, it tells you how to grant access and waits.
+1. Do you want an agent now, and should it run on Codex or Claude?
+2. What should it be called, and what will it do?
+3. Which model and reasoning level? It lists what your login offers and suggests one.
+4. Create the agent on https://app.band.ai/agents/create with the name and description it gives you, then paste back the ID and API key.
+
+It then installs the agent as a service, checks that it is online, fixes anything that goes wrong, and tells you how to start using it in Band.
 
 **For coding agents:** read [AGENT_INSTALL.md](AGENT_INSTALL.md) and follow it step by step. It is written for a shell with no terminal attached.
 
