@@ -5,11 +5,25 @@ Follow this runbook when an operator asks you to set up Band agents on this mach
 ## Rules
 
 - Each shell command may run in a fresh shell with no terminal attached. Start every command with `export PATH="$HOME/.local/bin:$PATH";` and never run anything that waits for keyboard input.
-- These steps need network access and write outside the current directory: `~/.local`, `~/.config`, and systemd. In a sandboxed Codex session, request escalated permissions for them. In Claude Code, the operator approves each command.
+- Follow the steps in order. In each message to the operator, ask only what the current step needs. Never ask for an agent ID or API key before step 6, where the operator first gets the name and description to create the agent with.
+- Do the installation yourself. Never hand the operator these commands to run in another terminal. The only commands the operator runs are sign-ins (step 4) and, when step 7 says so, `sudo loginctl enable-linger`.
 - Never print, echo, log, or commit an agent API key after the operator gives it to you. Pass it to the installer only through stdin, as shown in step 7.
 - Do not ask for a human or user API key. Agent API keys come from the Band website.
-- Interactive logins (Codex, Claude, `sudo`) cannot run from your shell. When one is needed, give the operator the exact command, then wait until they confirm it finished.
 - Configuration fields are documented in `config.example.yaml` in this repository. Read it before answering configuration questions.
+
+## 0. Get write access outside this folder
+
+The install writes to `~/.local`, `~/.cache`, `~/.config`, and systemd, and it downloads packages. Confirm that you can:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"; mkdir -p "$HOME/.local/share" "$HOME/.cache" "$HOME/.config" && touch "$HOME/.local/share/.band-agentd-probe" "$HOME/.cache/.band-agentd-probe" && rm "$HOME/.local/share/.band-agentd-probe" "$HOME/.cache/.band-agentd-probe" && curl -fsS -o /dev/null https://github.com && echo access-ok
+```
+
+If `access-ok` does not print, rerun the same command with escalated permissions; in Codex, that sends the operator an approval request. If escalation is unavailable or refused, stop and send the operator exactly this:
+
+> The install needs to write outside this folder and use the network. In Codex, type `/permissions`, choose **Full Access**, and tell me to continue. In Claude Code, approve the commands when asked.
+
+Do not continue to step 1 until `access-ok` prints.
 
 ## 1. Check the machine
 
@@ -29,11 +43,11 @@ export PATH="$HOME/.local/bin:$PATH"; command -v uv >/dev/null || curl -LsSf htt
 export PATH="$HOME/.local/bin:$PATH"; SRC="$HOME/.local/share/band-agentd/src"; if [ -d "$SRC/.git" ]; then git -C "$SRC" pull --ff-only; else git clone https://github.com/darvell-thenvoi/band-agentd "$SRC"; fi; uv tool install --force "${SRC}[codex,claude]" && band-agentd --help >/dev/null && echo band-agentd-ok
 ```
 
-Keep the braces in `"${SRC}[codex,claude]"`. Without them, zsh reads `[codex,claude]` as an array subscript.
+Keep the braces in `"${SRC}[codex,claude]"`. Without them, zsh reads `[codex,claude]` as an array subscript. A copy you cloned elsewhere to read this file can stay where it is; band-agentd installs from this one.
 
 ## 3. Ask which agents to create
 
-Ask the operator in one message. Offer an example, such as "one Codex agent working on `~/src/api`":
+Ask the operator in one message. Do not ask for an ID or API key yet. Offer an example, such as "one Codex agent working on `~/src/api`":
 
 1. **How many agents**, and for each one:
    - **Runtime:** `codex` or `claude`. Recommend the runtime the operator is using with you right now, because it is already installed and signed in on this machine.
