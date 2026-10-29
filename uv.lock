@@ -73,9 +73,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "band-sdk", specifier = ">=7.0.0" },
-    { name = "band-sdk", extras = ["claude-sdk"], marker = "extra == 'claude'", specifier = ">=7.0.0" },
-    { name = "band-sdk", extras = ["codex"], marker = "extra == 'codex'", specifier = ">=7.0.0" },
+    { name = "band-sdk", specifier = ">=7.0.0,<8" },
+    { name = "band-sdk", extras = ["claude-sdk"], marker = "extra == 'claude'", specifier = ">=7.0.0,<8" },
+    { name = "band-sdk", extras = ["codex"], marker = "extra == 'codex'", specifier = ">=7.0.0,<8" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]

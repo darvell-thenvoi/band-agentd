@@ -5,6 +5,7 @@ import asyncio
 import getpass
 import json
 import os
+import re
 import stat
 import sys
 import uuid
@@ -24,10 +25,13 @@ from .service import (
     remove_systemd_service,
     render_systemd_unit,
 )
+from .workspaces import WorkspaceMode, worktree_repo
 
 DEFAULT_UNIT = "band-agentd"
 ADAPTERS = ("codex", "claude")
 USER_KEY_PREFIXES = ("thnv_u_", "band_u_")
+# Becomes a systemd unit and a file name, so it stays within what both accept.
+UNIT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 
 
 class ServiceMode(StrEnum):
@@ -81,6 +85,12 @@ def _parser() -> argparse.ArgumentParser:
         default=Access.ASK,
         help="full: no prompts; ask: approvals in the room; read-only: no changes",
     )
+    install.add_argument(
+        "--workspace",
+        choices=[mode.value for mode in WorkspaceMode],
+        default=WorkspaceMode.SHARED,
+        help="shared: every room works in --cwd; worktree: each room gets a git worktree",
+    )
     install.add_argument("--name", default="Band coding agent")
     install.add_argument("--description", default="A coding agent that works in Band rooms.")
     install.add_argument("--instructions", help="extra system-prompt text, such as the agent's role")
@@ -110,6 +120,9 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("--adapter", choices=ADAPTERS, default="codex")
     init.add_argument("--cwd", default=".", type=Path)
     init.add_argument("--access", choices=[level.value for level in Access], default=Access.ASK)
+    init.add_argument(
+        "--workspace", choices=[mode.value for mode in WorkspaceMode], default=WorkspaceMode.SHARED
+    )
     init.add_argument("--force", action="store_true")
 
     remove = subparsers.add_parser(
@@ -128,6 +141,7 @@ def _starter_config(args: argparse.Namespace) -> dict[str, Any]:
     runtime = {
         "adapter": args.adapter,
         "cwd": str(Path(args.cwd).expanduser().resolve()),
+        "workspace": WorkspaceMode(args.workspace).value,
         "yolo": False,
         "instructions": None,
         "instructions_file": None,
@@ -258,11 +272,14 @@ def _install(args: argparse.Namespace) -> None:
     adapter = _value(args.adapter, "Agent type (codex or claude)", "--adapter", "codex")
     if adapter not in ADAPTERS:
         raise ValueError("Agent type must be codex or claude")
+    _check_unit_name(args.unit)
 
     cwd = Path(_value(str(args.cwd) if args.cwd else None, "Working directory", "--cwd"))
     cwd = cwd.expanduser().resolve()
     if not cwd.is_dir():
         raise ValueError(f"Working directory does not exist: {cwd}")
+    if WorkspaceMode(args.workspace) is WorkspaceMode.WORKTREE:
+        worktree_repo(cwd)
 
     agent_id = _agent_id(_value(args.agent_id, "Agent ID", "--agent-id"))
     api_key = _api_key(args.api_key_stdin)
@@ -282,6 +299,7 @@ def _install(args: argparse.Namespace) -> None:
             description=args.description,
             cwd=cwd,
             access=args.access,
+            workspace=args.workspace,
         )
     )
     data["agent"]["id"] = agent_id
@@ -310,7 +328,16 @@ def _install(args: argparse.Namespace) -> None:
         print(f"Warning: {warning}")
 
 
+def _check_unit_name(unit: str) -> None:
+    if not UNIT_NAME.fullmatch(unit):
+        raise ValueError(
+            f"Service name {unit!r} must be letters, numbers, '.', '_' or '-', "
+            "for example payments-helper"
+        )
+
+
 def _remove(unit: str) -> None:
+    _check_unit_name(unit)
     config_path = default_config_path(unit)
     unit_file = remove_systemd_service(unit, default_scope())
     config_existed = config_path.exists()
@@ -328,9 +355,9 @@ def _remove(unit: str) -> None:
     if config_existed:
         print(f"Removed {config_path}")
     print(
-        "Work branches (band/<room-id>) and their worktrees under "
-        "~/.local/share/band-agentd/worktrees are kept. The agent still exists on Band; "
-        "delete it from its menu on app.band.ai if you no longer need it."
+        "Its working folder, and any room worktrees under "
+        "~/.local/share/band-agentd/worktrees, are left as they are. The agent still "
+        "exists on Band; delete it from its menu on app.band.ai if you no longer need it."
     )
 
 

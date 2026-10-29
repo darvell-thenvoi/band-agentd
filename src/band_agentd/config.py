@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 AdapterName = Literal["codex", "claude"]
 ApprovalMode = Literal["manual", "auto_accept", "auto_decline"]
+Workspace = Literal["shared", "worktree"]
 
 
 class AgentConfig(BaseModel):
@@ -43,6 +44,7 @@ class RuntimeConfig(BaseModel):
 
     adapter: AdapterName = "codex"
     cwd: Path = Path(".")
+    workspace: Workspace = "shared"
     yolo: bool = False
     instructions: str | None = None
     instructions_file: Path | None = None

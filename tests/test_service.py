@@ -25,3 +25,11 @@ def test_system_unit_waits_for_the_network(tmp_path):
 
     assert "WantedBy=multi-user.target" in unit
     assert "After=network-online.target" in unit
+
+
+def test_unit_escapes_systemd_specifiers_in_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", "/opt/100%/bin:/usr/bin")
+
+    unit = render_systemd_unit(tmp_path / "agent.yaml")
+
+    assert 'Environment="PATH=/opt/100%%/bin:/usr/bin"' in unit

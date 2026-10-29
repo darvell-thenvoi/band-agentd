@@ -8,14 +8,14 @@ version = "0.1.0"
 description = "Run durable Band Codex and Claude agents as supervised services"
 requires-python = ">=3.11"
 dependencies = [
-    "band-sdk>=7.0.0",
+    "band-sdk>=7.0.0,<8",
     "pydantic>=2.0",
     "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
-codex = ["band-sdk[codex]>=7.0.0"]
-claude = ["band-sdk[claude_sdk]>=7.0.0"]
+codex = ["band-sdk[codex]>=7.0.0,<8"]
+claude = ["band-sdk[claude_sdk]>=7.0.0,<8"]
 
 [project.scripts]
 band-agentd = "band_agentd.cli:main"

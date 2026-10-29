@@ -24,11 +24,15 @@ runtime:
   # Claude uses the Claude Code CLI bundled with band-agentd and its login.
   adapter: codex
 
-  # Repository or directory the agent works in. Inside a git repository, each
-  # room gets its own worktree on branch band/<room-id> under
-  # ~/.local/share/band-agentd/worktrees/. Outside git, each room gets an empty
-  # directory <cwd>/<room-id>.
+  # Repository or directory the agent works in.
   cwd: /home/op/src/payments
+
+  # shared: every room works directly in cwd, so concurrent rooms can edit
+  #   the same files.
+  # worktree: each room gets its own git worktree of the repository containing
+  #   cwd, on branch band/<room-id> under ~/.local/share/band-agentd/worktrees/.
+  #   Needs a git repository with at least one commit.
+  workspace: shared
 
   # Access level. The installer's --access flag sets these fields:
   #   full access - yolo: true

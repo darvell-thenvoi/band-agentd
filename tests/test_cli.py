@@ -81,6 +81,21 @@ def test_install_rejects_a_handle_instead_of_an_id(tmp_path, monkeypatch, capsys
     assert "UUID" in capsys.readouterr().err
 
 
+def test_install_rejects_a_service_name_systemd_cannot_use(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO("agent-secret-key\n"))
+
+    assert main(install_args(tmp_path, "--skip-checks", "--unit", "my agent")) == 2
+    assert "Service name" in capsys.readouterr().err
+
+
+def test_install_checks_worktree_mode_before_writing(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO("agent-secret-key\n"))
+
+    assert main(install_args(tmp_path, "--skip-checks", "--workspace", "worktree")) == 2
+    assert "needs a git repository" in capsys.readouterr().err
+    assert not (tmp_path / "conf" / "agent.yaml").exists()
+
+
 def test_install_rejects_a_model_the_login_does_not_offer(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO("agent-secret-key\n"))
     monkeypatch.setattr(cli, "check_runtime", lambda _adapter: None)

@@ -145,13 +145,11 @@ export PATH="$HOME/.local/bin:$PATH"; sleep 10; systemctl --user is-active <serv
 
 Tell the user, briefly:
 
-> **<name>** is live on Band. To use it, open or create a room at app.band.ai, add <name>, and @mention it with what you need. It only responds when it is mentioned, and it can work in several rooms at once.
->
-> Each room works on its own git branch named `band/<room-id>`, so you can review its changes like any branch.
+> **<name>** is live on Band. To use it, open or create a room at app.band.ai, add <name>, and @mention it with what you need. It only responds when it is mentioned, and it can work in several rooms at once, all in `<working folder>`.
 >
 > To change it, edit `~/.config/band-agentd/<service name>.yaml`; it restarts on its own when you save. To add more agents or change one later, open Codex or Claude in `~/.local/share/band-agentd/src` and ask; the instructions there tell it what to do.
 >
-> To remove it from this machine, run `band-agentd remove <service name>`. That stops it and deletes its settings but keeps its branches. To delete it from Band too, use its menu on app.band.ai.
+> To remove it from this machine, run `band-agentd remove <service name>`. That stops it and deletes its settings but leaves `<working folder>` alone. To delete it from Band too, use its menu on app.band.ai.
 
 With **Ask first**, add: "When it needs permission, it asks in the room. Reply `/approve <id>` or `/decline <id>`." For a Claude agent with **Ask first**, also add: "Claude asks before every action, including reading files. If that gets noisy, I can switch it to full access."
 
@@ -164,5 +162,6 @@ A user may open Codex or Claude in `~/.local/share/band-agentd/src` later to add
 - **Find the agents:** `ls ~/.config/band-agentd/`. Each `<service name>.yaml` is one agent.
 - **Add an agent:** run the conversation from Q1. Part 1 only needs `git -C ~/.local/share/band-agentd/src pull --ff-only` and the `uv tool install` command, to pick up updates.
 - **Change an agent:** edit its settings file. Saving restarts the agent within a second. `config.example.yaml` explains each field. Common changes are `runtime.instructions`, `runtime.model` and `runtime.reasoning_effort` (choices from `band-agentd models --adapter <codex|claude>`), and access: `runtime.yolo: true` is full access, and `false` with `approval_mode: manual` is ask first.
-- **Remove an agent:** `band-agentd remove <service name>`. Tell the user that its branches stay in the repository and that the agent still exists on Band until they delete it from its menu on app.band.ai.
+- **Separate checkouts per room:** if the user wants rooms not to share files, set `runtime.workspace: worktree`. Each room then works in its own git worktree on a branch named `band/<room-id>`. The working folder must be in a git repository with at least one commit.
+- **Remove an agent:** `band-agentd remove <service name>`. Tell the user that its working folder is untouched and that the agent still exists on Band until they delete it from its menu on app.band.ai.
 - **Status and logs:** `systemctl --user status <service name>` and `journalctl --user -u <service name> -f`, without `--user` when installed as root.

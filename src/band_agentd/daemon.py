@@ -9,9 +9,25 @@ from pathlib import Path
 from typing import Any
 
 from .config import DaemonConfig, load_config
-from .workspaces import room_workspace_resolver
+from .workspaces import SharedWorkspace, WorkspaceMode, room_worktree_resolver
 
 logger = logging.getLogger(__name__)
+
+
+def _share_workspace(adapter: Any, cwd: Path) -> None:
+    """Let all of a Codex agent's rooms work in ``cwd``.
+
+    The Codex adapter keeps its per-room directory claims in ``_workspaces``
+    and has no setting to share one directory, so the registry is replaced.
+    """
+    from band.workspaces import RoomWorkspaces
+
+    if not isinstance(getattr(adapter, "_workspaces", None), RoomWorkspaces):
+        raise RuntimeError(
+            "This band-sdk version changed how the Codex adapter assigns room "
+            "folders. Update band-agentd."
+        )
+    adapter._workspaces = SharedWorkspace(cwd)
 
 
 def _emit_values(config: DaemonConfig) -> set[Any]:
@@ -32,18 +48,22 @@ def _emit_values(config: DaemonConfig) -> set[Any]:
 
 def build_adapter(config: DaemonConfig) -> Any:
     runtime = config.runtime
-    workspace_for_room = room_workspace_resolver(runtime.cwd)
     instructions = config.resolved_instructions(Path.cwd())
     approval_mode = "auto_accept" if runtime.yolo else runtime.approval_mode
+    worktrees = (
+        room_worktree_resolver(runtime.cwd)
+        if WorkspaceMode(runtime.workspace) is WorkspaceMode.WORKTREE
+        else None
+    )
 
     if runtime.adapter == "codex":
         from band.adapters.codex import CodexAdapter, CodexAdapterConfig
 
         # "never" stops Codex from asking at all, so room approvals only work
         # when Codex is allowed to request escalation ("on-request").
-        return CodexAdapter(
+        adapter = CodexAdapter(
             config=CodexAdapterConfig(
-                workspace_for_room=workspace_for_room,
+                workspace_for_room=worktrees,
                 model=runtime.model,
                 reasoning_effort=runtime.reasoning_effort,
                 custom_section=instructions or "",
@@ -57,6 +77,9 @@ def build_adapter(config: DaemonConfig) -> Any:
             ),
             emit=_emit_values(config),
         )
+        if worktrees is None:
+            _share_workspace(adapter, runtime.cwd)
+        return adapter
 
     from band.adapters.claude_sdk import (
         ClaudeApprovalOptions,
@@ -87,10 +110,11 @@ def build_adapter(config: DaemonConfig) -> Any:
             custom_section=instructions,
             permission_mode=permission_mode,
             max_thinking_tokens=runtime.max_thinking_tokens,
+            cwd=None if worktrees else runtime.cwd,
             turn_timeout_s=None,
             approvals=approvals,
         ),
-        workspace_for_room=workspace_for_room,
+        workspace_for_room=worktrees,
         emit=emit,
     )
 
@@ -122,7 +146,7 @@ class AgentDaemon:
         self.adapter_factory = adapter_factory
         self.agent_factory = agent_factory
         self._stopping = asyncio.Event()
-        self._reload_requested = False
+        self._reloading = False
 
     @classmethod
     def from_path(cls, path: str | Path) -> AgentDaemon:
@@ -135,12 +159,12 @@ class AgentDaemon:
     async def run(self) -> None:
         self._install_host_signals()
         delay = self.config.restart.initial_delay_s
+        first_attempt = True
 
         while not self._stopping.is_set():
-            if self._reload_requested:
-                await self._reload_config()
-                if self._reload_requested:
-                    continue
+            if not first_attempt:
+                self._refresh_config()
+            first_attempt = False
 
             try:
                 await self._run_agent_once()
@@ -153,12 +177,12 @@ class AgentDaemon:
             else:
                 if self._stopping.is_set():
                     break
-                if self._reload_requested:
+                if self._reloading:
+                    self._reloading = False
+                    delay = self.config.restart.initial_delay_s
                     continue
                 logger.warning("Agent connection ended")
 
-            if self._reload_requested:
-                continue
             if not self.config.restart.enabled:
                 break
             logger.info("Restarting agent in %.1f seconds", delay)
@@ -200,8 +224,8 @@ class AgentDaemon:
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if watch_task in done and not self._stopping.is_set():
-                    self._reload_requested = True
-                    logger.info("Config or instructions changed; reloading agent")
+                    self._reloading = True
+                    logger.info("Settings changed; restarting agent")
                     await agent.stop(timeout=self.config.shutdown_timeout_s)
                 await run_task
             finally:
@@ -210,13 +234,25 @@ class AgentDaemon:
                 await asyncio.gather(watch_task, return_exceptions=True)
 
     async def _watch_files(self) -> None:
+        """Return once the settings or instructions change to something valid.
+
+        An invalid edit is logged and ignored, so the agent keeps running on
+        its current settings until the file is fixed.
+        """
         watched = self._watched_files()
         previous = self._file_snapshot(watched)
         while True:
             await asyncio.sleep(self.config.reload_interval_s)
             current = self._file_snapshot(watched)
-            if current != previous:
-                return
+            if current == previous:
+                continue
+            previous = current
+            try:
+                load_config(self.config_path).resolved_instructions(self.config_path)
+            except (OSError, ValueError) as exc:
+                logger.error("Ignoring settings change until it is fixed: %s", exc)
+                continue
+            return
 
     def _watched_files(self) -> tuple[Path, ...]:
         paths = [self.config_path]
@@ -237,15 +273,12 @@ class AgentDaemon:
                 snapshot.append((str(path), info.st_mtime_ns, info.st_size))
         return tuple(snapshot)
 
-    async def _reload_config(self) -> None:
+    def _refresh_config(self) -> None:
+        """Pick up the settings file as it is now, or keep the last valid one."""
         try:
             self.config = load_config(self.config_path)
         except (OSError, ValueError) as exc:
-            logger.error("Config reload failed: %s", exc)
-            await asyncio.sleep(self.config.reload_interval_s)
-            return
-        self._reload_requested = False
-        logger.info("Reloaded config from %s", self.config_path)
+            logger.error("Keeping the previous settings: %s", exc)
 
     def _install_host_signals(self) -> None:
         loop = asyncio.get_running_loop()

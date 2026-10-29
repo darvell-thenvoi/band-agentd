@@ -1,6 +1,6 @@
 # band-agentd
 
-band-agentd runs Band agents backed by Codex or Claude on a Linux machine, one systemd service per agent. Each Band room gets its own native session and its own git worktree of the working directory. Each agent's settings live in one YAML file, and saving it restarts that agent automatically.
+band-agentd runs Band agents backed by Codex or Claude on a Linux machine, one systemd service per agent. Each agent works in the folder you choose, with a separate native session per Band room. Each agent's settings live in one YAML file, and saving it restarts that agent automatically.
 
 ## Set up agents with a coding agent
 
@@ -35,7 +35,7 @@ It then installs the agent as a service, checks that it is online, fixes anythin
 
 - **Add another agent or change one:** open Codex or Claude in `~/.local/share/band-agentd/src`, the folder band-agentd installs from, and ask. Its `AGENTS.md` and `CLAUDE.md` point the session to these instructions.
 - **Change settings directly:** edit `~/.config/band-agentd/<name>.yaml`. Saving restarts that agent automatically. [config.example.yaml](config.example.yaml) explains every field.
-- **Remove an agent:** `band-agentd remove <name>`. This stops the service and deletes its service file and settings. The agent's `band/<room-id>` branches stay in the repository, and the agent stays on Band until you delete it from its menu on app.band.ai.
+- **Remove an agent:** `band-agentd remove <name>`. This stops the service and deletes its service file and settings. Its working folder is left untouched, and the agent stays on Band until you delete it from its menu on app.band.ai.
 - **List agents:** `ls ~/.config/band-agentd/`. Each file is one agent.
 
 **For coding agents:** read [AGENT_INSTALL.md](AGENT_INSTALL.md) and follow it step by step. It is written for a shell with no terminal attached.
@@ -90,14 +90,16 @@ Drop `--user` for a root install. Use `--service none` on machines without syste
 
 Add the agent to a room on app.band.ai and @mention it. A mention is the only thing that wakes it. One process serves any number of rooms at once.
 
-**Workspaces.** If `runtime.cwd` is inside a git repository, each room gets a worktree of that repository under `~/.local/share/band-agentd/worktrees/` on a branch named `band/<room-id>`, at the same subdirectory as `cwd`. Rooms never share a checkout, and their work shows up in the original repository as branches. A worktree starts from the repository's committed `HEAD`, so uncommitted changes in your own checkout are not included. If `cwd` is not in a git repository, each room gets an empty directory `<cwd>/<room-id>`.
+**Working folder.** By default (`workspace: shared`), every room works directly in `runtime.cwd`, as if you had opened Codex or Claude there. Rooms running at the same time can edit the same files.
+
+For separate checkouts, set `workspace: worktree` (or install with `--workspace worktree`). Each room then gets a git worktree of the repository containing `cwd`, under `~/.local/share/band-agentd/worktrees/`, on a branch named `band/<room-id>`. Each room's work shows up as a branch in your repository. This mode needs a git repository with at least one commit, and each worktree starts from the committed `HEAD`, without uncommitted changes.
 
 **Access.** Each agent has one of three levels, chosen at setup:
 
 | Level | Codex | Claude |
 | --- | --- | --- |
 | Full access (`yolo: true`) | `danger-full-access`, no prompts | `bypassPermissions`, no prompts |
-| Ask first | `workspace-write` sandbox: works freely in its worktree and asks in the room before anything outside it, such as network access or writing to `.git` | Asks in the room before every native tool call, including file reads |
+| Ask first | `workspace-write` sandbox: works freely in its working folder and asks in the room before anything outside it, such as network access or writing to `.git` | Asks in the room before every native tool call, including file reads |
 | Read only | `read-only` sandbox, requests declined | `plan` mode |
 
 Approval requests appear in the room. Reply `/approve <id>` or `/decline <id>`. Codex also accepts `/approve-session <id>` to allow similar requests for the rest of the session. Unanswered requests are declined after 5 minutes. Full access is meant for a machine where the agent may run any command as the service user.
@@ -118,6 +120,7 @@ Common changes:
 | `runtime.yolo` | `true` is full access, with no approval prompts |
 | `runtime.approval_mode` | `manual`, `auto_accept`, or `auto_decline` for approval requests |
 | `runtime.cwd` | Repository or directory the agent works in |
+| `runtime.workspace` | `shared` (every room in `cwd`) or `worktree` (a git worktree and branch per room) |
 | `runtime.adapter` | `codex` or `claude` |
 
 Do not put a user API key (`band_u_…` or `thnv_u_…`) in `agent.api_key`. It needs the key Band generated for this agent.

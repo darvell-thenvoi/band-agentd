@@ -1,33 +1,28 @@
 import subprocess
 from pathlib import Path
 
-from band_agentd.workspaces import room_workspace_resolver
+import pytest
+from gitrepo import git, make_repo
+
+from band_agentd.workspaces import SharedWorkspace, room_worktree_resolver
 
 
-def git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+def test_shared_workspace_gives_every_room_the_same_folder(tmp_path):
+    shared = SharedWorkspace(tmp_path)
 
+    with shared.claiming("room-1") as first:
+        second = shared.claim("room-2")
 
-def make_repo(path: Path) -> Path:
-    path.mkdir()
-    git(path, "init", "-q")
-    (path / "sub").mkdir()
-    (path / "sub" / "app.py").write_text("print('hi')\n", encoding="utf-8")
-    (path / "README.md").write_text("repo\n", encoding="utf-8")
-    git(path, "add", ".")
-    git(path, "commit", "-q", "-m", "init")
-    return path
+    assert first == second == str(tmp_path.resolve())
+    assert set(shared.rooms) == {"room-1", "room-2"}
+    shared.release("room-1")
+    assert shared.rooms == ("room-2",)
 
 
 def test_git_repo_gets_a_worktree_per_room_on_its_own_branch(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     repo = make_repo(tmp_path / "repo")
-    resolve = room_workspace_resolver(repo)
+    resolve = room_worktree_resolver(repo)
 
     first = Path(resolve("room-1"))
     second = Path(resolve("room-2"))
@@ -43,7 +38,7 @@ def test_git_repo_gets_a_worktree_per_room_on_its_own_branch(tmp_path, monkeypat
 def test_worktree_is_recreated_from_the_existing_branch(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     repo = make_repo(tmp_path / "repo")
-    resolve = room_workspace_resolver(repo)
+    resolve = room_worktree_resolver(repo)
     workspace = Path(resolve("room-1"))
     (workspace / "note.txt").write_text("work\n", encoding="utf-8")
     git(workspace, "add", "note.txt")
@@ -59,14 +54,19 @@ def test_subdirectory_of_a_repo_maps_to_the_same_subdirectory(tmp_path, monkeypa
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     repo = make_repo(tmp_path / "repo")
 
-    workspace = Path(room_workspace_resolver(repo / "sub")("room-1"))
+    workspace = Path(room_worktree_resolver(repo / "sub")("room-1"))
 
     assert workspace.name == "sub"
     assert (workspace / "app.py").is_file()
 
 
-def test_plain_directory_gets_a_room_subdirectory(tmp_path):
-    workspace = Path(room_workspace_resolver(tmp_path)("room-1"))
+def test_worktree_mode_rejects_a_plain_folder(tmp_path):
+    with pytest.raises(ValueError, match="needs a git repository"):
+        room_worktree_resolver(tmp_path)
 
-    assert workspace.parent == tmp_path.resolve()
-    assert workspace.is_dir()
+
+def test_worktree_mode_rejects_a_repo_without_commits(tmp_path):
+    repo = make_repo(tmp_path / "repo", commit=False)
+
+    with pytest.raises(ValueError, match="at least one commit"):
+        room_worktree_resolver(repo)

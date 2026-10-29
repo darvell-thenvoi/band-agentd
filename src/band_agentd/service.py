@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pwd
 import shutil
 import subprocess
 import sys
@@ -26,6 +27,11 @@ def unit_path(unit_name: str, scope: ServiceScope) -> Path:
     return config_home / "systemd" / "user" / f"{unit_name}.service"
 
 
+def _unit_value(value: str) -> str:
+    """Escape a value for a quoted unit-file setting; systemd expands % specifiers."""
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%")
+
+
 def render_systemd_unit(
     config_path: str | Path,
     *,
@@ -48,8 +54,8 @@ def render_systemd_unit(
         "Type=simple",
         f"WorkingDirectory={config.parent}",
         f'ExecStart="{sys.executable}" -m band_agentd run --config "{config}"',
-        f'Environment="PATH={os.environ.get("PATH", "")}"',
-        f'Environment="HOME={Path.home()}"',
+        f'Environment="PATH={_unit_value(os.environ.get("PATH", ""))}"',
+        f'Environment="HOME={_unit_value(str(Path.home()))}"',
         "Environment=PYTHONUNBUFFERED=1",
         "Restart=always",
         "RestartSec=5",
@@ -79,7 +85,7 @@ def _ensure_linger() -> str | None:
 
     Returns a warning when lingering cannot be enabled without root.
     """
-    user = os.environ.get("USER") or Path.home().name
+    user = pwd.getpwuid(os.getuid()).pw_name
     shown = subprocess.run(
         ["loginctl", "show-user", user, "-p", "Linger", "--value"],
         capture_output=True,
