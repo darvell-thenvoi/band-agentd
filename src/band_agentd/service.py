@@ -124,3 +124,21 @@ def install_systemd_service(
     _require_ok(_systemctl(scope, "enable", service), "enable")
     _require_ok(_systemctl(scope, "restart", service), "restart")
     return path, warning
+
+
+def remove_systemd_service(unit_name: str, scope: ServiceScope) -> Path | None:
+    """Stop and disable the agent's service and delete its unit file.
+
+    Returns the deleted unit file, or None when there was none.
+    """
+    path = unit_path(unit_name, scope)
+    has_systemd = shutil.which("systemctl") is not None
+    if has_systemd:
+        # A unit that was never loaded makes this fail harmlessly.
+        _systemctl(scope, "disable", "--now", f"{unit_name}.service")
+    if not path.exists():
+        return None
+    path.unlink()
+    if has_systemd:
+        _require_ok(_systemctl(scope, "daemon-reload"), "daemon-reload")
+    return path

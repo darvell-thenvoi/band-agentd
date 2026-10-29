@@ -1,6 +1,6 @@
 # Setting up Band agents (instructions for coding agents)
 
-Use this when the user asks you to set up Band agents on this machine. Through a short conversation, you install band-agentd and connect a Band agent that runs on Codex or Claude, then leave it running as a service. You do all the technical work. The user answers a few plain questions and creates the agent on the Band website.
+Use this when the user asks you to set up, change, or remove Band agents on this machine. To set one up, you install band-agentd through a short conversation and connect a Band agent that runs on Codex or Claude, then leave it running as a service. You do all the technical work. The user answers a few plain questions and creates the agent on the Band website. For changes or removal of existing agents, go to "Later requests" at the end.
 
 ## How to talk to the user
 
@@ -27,7 +27,7 @@ export PATH="$HOME/.local/bin:$PATH"; mkdir -p "$HOME/.local/share" "$HOME/.cach
 
 If `access-ok` does not print, run it again with escalated permissions. If you cannot escalate, or the request is refused, send the user this and wait:
 
-> I need permission to install outside this folder and use the network. In Codex, type `/permissions`, choose **Ask for approval**, and tell me to continue. I'll ask before each step. In Claude Code, approve the commands as they come up.
+> I need permission to install outside this folder and use the network. In Codex, type `/permissions` and choose **Full Access**, or **Ask for approval** to approve each step, then tell me to continue. In Claude Code, approve the commands as they come up.
 
 **Machine check.**
 
@@ -87,7 +87,16 @@ export PATH="$HOME/.local/bin:$PATH"; band-agentd models --adapter <codex|claude
 
 For Codex, suggest `gpt-6.1-sol` with `medium` when the list has it. Otherwise, and for Claude, suggest the model marked `*` with `medium`. Accept only models and reasoning levels from the list.
 
-### Q4. Create the agent on Band
+### Q4. How much freedom?
+
+> How much should it be allowed to do on this machine?
+> 1. **Full access** (suggested): runs any command and edits any file without asking. Best for a machine dedicated to the agent.
+> 2. **Ask first**: works freely in its own folder and asks in the Band room before anything else, like installing packages or committing.
+> 3. **Read only**: reads and answers questions, but changes nothing.
+
+For Claude, describe **Ask first** as "asks in the Band room before every action, including reading files", because that is how Claude's approvals work. Map the answer to `--access full`, `--access ask`, or `--access read-only`.
+
+### Q5. Create the agent on Band
 
 > Last step on your side: create the agent on Band.
 > 1. Open https://app.band.ai/agents/create
@@ -111,6 +120,7 @@ export PATH="$HOME/.local/bin:$PATH"; printf '%s\n' '<API key>' | band-agentd in
   --instructions '<instructions>' \
   --model <model> \
   --reasoning-effort <level> \
+  --access <full|ask|read-only> \
   --unit <service name>
 ```
 
@@ -137,16 +147,22 @@ Tell the user, briefly:
 
 > **<name>** is live on Band. To use it, open or create a room at app.band.ai, add <name>, and @mention it with what you need. It only responds when it is mentioned, and it can work in several rooms at once.
 >
-> When it needs permission for something, it asks in the room. Reply `/approve <id>` or `/decline <id>`. Each room works on its own git branch named `band/<room-id>`, so you can review its changes like any branch.
+> Each room works on its own git branch named `band/<room-id>`, so you can review its changes like any branch.
 >
-> To change its model, instructions, or anything else, just ask me. I'll update its settings, and it restarts on its own.
+> To change it, edit `~/.config/band-agentd/<service name>.yaml`; it restarts on its own when you save. To add more agents or change one later, open Codex or Claude in `~/.local/share/band-agentd/src` and ask; the instructions there tell it what to do.
+>
+> To remove it from this machine, run `band-agentd remove <service name>`. That stops it and deletes its settings but keeps its branches. To delete it from Band too, use its menu on app.band.ai.
 
-For a Claude agent, add: "Claude asks before every action, including reading files. If that gets noisy, I can switch it to approve automatically."
+With **Ask first**, add: "When it needs permission, it asks in the room. Reply `/approve <id>` or `/decline <id>`." For a Claude agent with **Ask first**, also add: "Claude asks before every action, including reading files. If that gets noisy, I can switch it to full access."
 
 Then ask: "Want to set up another agent?" If yes, go back to Q1.
 
-## Reference for later requests
+## Later requests
 
-- Settings file: `~/.config/band-agentd/<service name>.yaml`. Saving it restarts the agent within a second. `config.example.yaml` explains each field. Common changes: `runtime.instructions`, `runtime.model` and `runtime.reasoning_effort` (choices from `band-agentd models`), `runtime.yolo` to remove all approval prompts, and `runtime.approval_mode`.
-- Status and logs: `systemctl --user status <service name>` and `journalctl --user -u <service name> -f`, without `--user` when installed as root.
-- Remove an agent: `systemctl --user disable --now <service name>`, then delete its settings file and `~/.config/systemd/user/<service name>.service` (`/etc/systemd/system/` when root).
+A user may open Codex or Claude in `~/.local/share/band-agentd/src` later to add, change, or remove agents.
+
+- **Find the agents:** `ls ~/.config/band-agentd/`. Each `<service name>.yaml` is one agent.
+- **Add an agent:** run the conversation from Q1. Part 1 only needs `git -C ~/.local/share/band-agentd/src pull --ff-only` and the `uv tool install` command, to pick up updates.
+- **Change an agent:** edit its settings file. Saving restarts the agent within a second. `config.example.yaml` explains each field. Common changes are `runtime.instructions`, `runtime.model` and `runtime.reasoning_effort` (choices from `band-agentd models --adapter <codex|claude>`), and access: `runtime.yolo: true` is full access, and `false` with `approval_mode: manual` is ask first.
+- **Remove an agent:** `band-agentd remove <service name>`. Tell the user that its branches stay in the repository and that the agent still exists on Band until they delete it from its menu on app.band.ai.
+- **Status and logs:** `systemctl --user status <service name>` and `journalctl --user -u <service name> -f`, without `--user` when installed as root.

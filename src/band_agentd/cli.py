@@ -21,6 +21,7 @@ from .service import (
     ServiceScope,
     default_scope,
     install_systemd_service,
+    remove_systemd_service,
     render_systemd_unit,
 )
 
@@ -32,6 +33,26 @@ USER_KEY_PREFIXES = ("thnv_u_", "band_u_")
 class ServiceMode(StrEnum):
     SYSTEMD = "systemd"
     NONE = "none"
+
+
+class Access(StrEnum):
+    FULL = "full"
+    ASK = "ask"
+    READ_ONLY = "read-only"
+
+
+# How much the agent may do, as settings for both runtimes; each runtime
+# ignores the fields that belong to the other.
+ACCESS_SETTINGS: dict[Access, dict[str, Any]] = {
+    Access.FULL: {"yolo": True},
+    Access.ASK: {"yolo": False, "approval_mode": "manual"},
+    Access.READ_ONLY: {
+        "yolo": False,
+        "approval_mode": "auto_decline",
+        "sandbox": "read-only",
+        "permission_mode": "plan",
+    },
+}
 
 
 def default_config_path(unit: str = DEFAULT_UNIT) -> Path:
@@ -54,7 +75,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="read the agent API key from the first line of stdin",
     )
-    install.add_argument("--yolo", action="store_true")
+    install.add_argument(
+        "--access",
+        choices=[level.value for level in Access],
+        default=Access.ASK,
+        help="full: no prompts; ask: approvals in the room; read-only: no changes",
+    )
     install.add_argument("--name", default="Band coding agent")
     install.add_argument("--description", default="A coding agent that works in Band rooms.")
     install.add_argument("--instructions", help="extra system-prompt text, such as the agent's role")
@@ -83,8 +109,13 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("--description", default="A coding agent that works in Band rooms.")
     init.add_argument("--adapter", choices=ADAPTERS, default="codex")
     init.add_argument("--cwd", default=".", type=Path)
-    init.add_argument("--yolo", action="store_true")
+    init.add_argument("--access", choices=[level.value for level in Access], default=Access.ASK)
     init.add_argument("--force", action="store_true")
+
+    remove = subparsers.add_parser(
+        "remove", help="stop an agent's service and delete its service file and settings"
+    )
+    remove.add_argument("unit", help="service name, the settings file name without .yaml")
 
     systemd = subparsers.add_parser("systemd", help="print the unit install would write")
     systemd.add_argument("--config", type=Path, default=default_config_path())
@@ -94,6 +125,24 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _starter_config(args: argparse.Namespace) -> dict[str, Any]:
+    runtime = {
+        "adapter": args.adapter,
+        "cwd": str(Path(args.cwd).expanduser().resolve()),
+        "yolo": False,
+        "instructions": None,
+        "instructions_file": None,
+        "model": None,
+        "reasoning_effort": None,
+        "approval_mode": "manual",
+        "sandbox": None,
+        "permission_mode": "acceptEdits",
+        "max_thinking_tokens": None,
+        "emit_tool_calls": True,
+        "emit_thoughts": True,
+        "emit_tasks": True,
+        "emit_usage": True,
+    }
+    runtime.update(ACCESS_SETTINGS[Access(args.access)])
     return {
         "agent": {
             "id": None,
@@ -101,23 +150,7 @@ def _starter_config(args: argparse.Namespace) -> dict[str, Any]:
             "name": args.name,
             "description": args.description,
         },
-        "runtime": {
-            "adapter": args.adapter,
-            "cwd": str(Path(args.cwd).expanduser().resolve()),
-            "yolo": args.yolo,
-            "instructions": None,
-            "instructions_file": None,
-            "model": None,
-            "reasoning_effort": None,
-            "approval_mode": "manual",
-            "sandbox": None,
-            "permission_mode": "acceptEdits",
-            "max_thinking_tokens": None,
-            "emit_tool_calls": True,
-            "emit_thoughts": True,
-            "emit_tasks": True,
-            "emit_usage": True,
-        },
+        "runtime": runtime,
         "restart": {
             "enabled": True,
             "initial_delay_s": 2,
@@ -248,7 +281,7 @@ def _install(args: argparse.Namespace) -> None:
             name=args.name,
             description=args.description,
             cwd=cwd,
-            yolo=args.yolo,
+            access=args.access,
         )
     )
     data["agent"]["id"] = agent_id
@@ -272,8 +305,33 @@ def _install(args: argparse.Namespace) -> None:
     print(f"Installed and started {unit_file}")
     print(f"Status: systemctl{flag} status {args.unit}")
     print(f"Logs:   journalctl{flag} -u {args.unit} -f")
+    print(f"Remove: band-agentd remove {args.unit}")
     if warning:
         print(f"Warning: {warning}")
+
+
+def _remove(unit: str) -> None:
+    config_path = default_config_path(unit)
+    unit_file = remove_systemd_service(unit, default_scope())
+    config_existed = config_path.exists()
+    if config_existed:
+        config_path.unlink()
+
+    if unit_file is None and not config_existed:
+        installed = sorted(path.stem for path in config_path.parent.glob("*.yaml"))
+        raise ValueError(
+            f"No agent named {unit!r} on this machine. Installed: {', '.join(installed) or 'none'}"
+        )
+
+    if unit_file is not None:
+        print(f"Stopped the service and removed {unit_file}")
+    if config_existed:
+        print(f"Removed {config_path}")
+    print(
+        "Work branches (band/<room-id>) and their worktrees under "
+        "~/.local/share/band-agentd/worktrees are kept. The agent still exists on Band; "
+        "delete it from its menu on app.band.ai if you no longer need it."
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -296,6 +354,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "init":
             print(_write_config(args.config, _starter_config(args), force=args.force))
+            return 0
+        if args.command == "remove":
+            _remove(args.unit)
             return 0
         if args.command == "systemd":
             print(render_systemd_unit(args.config, unit_name=args.unit, scope=default_scope()))

@@ -30,6 +30,11 @@ runtime:
   # directory <cwd>/<room-id>.
   cwd: /home/op/src/payments
 
+  # Access level. The installer's --access flag sets these fields:
+  #   full access - yolo: true
+  #   ask first   - yolo: false, approval_mode: manual (the values below)
+  #   read only   - yolo: false, approval_mode: auto_decline, sandbox: read-only,
+  #                 permission_mode: plan
   # true removes all approval prompts: Codex runs with danger-full-access,
   # Claude with bypassPermissions. Only on machines the agent may fully control.
   yolo: false
@@ -61,6 +66,7 @@ runtime:
   sandbox: null
 
   # Claude only, when yolo is false: default, acceptEdits, plan, auto.
+  # plan is read only and needs no approvals.
   permission_mode: acceptEdits
 
   # Claude only. Extended-thinking token budget; null disables it.

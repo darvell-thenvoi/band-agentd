@@ -70,8 +70,10 @@ def build_adapter(config: DaemonConfig) -> Any:
         if runtime.yolo
         else ClaudePermissionMode(runtime.permission_mode)
     )
+    # Room approvals route every native tool call, reads included, through
+    # the room. Plan mode is already read-only, so it needs none.
     approvals = None
-    if not runtime.yolo:
+    if not runtime.yolo and permission_mode is not ClaudePermissionMode.PLAN:
         approvals = ClaudeApprovalOptions(mode=approval_mode)
 
     from band.core.types import Emit
