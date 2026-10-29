@@ -82,8 +82,8 @@ async def _codex_models() -> list[ModelOption]:
     from band.integrations.codex import CodexStdioClient
 
     client = CodexStdioClient()
-    await client.connect()
     try:
+        await client.connect()
         await client.initialize(
             client_name="band_agentd", client_title="band-agentd", client_version="0"
         )
@@ -98,6 +98,11 @@ async def _codex_models() -> list[ModelOption]:
             cursor = page.get("nextCursor")
             if not cursor:
                 break
+    except Exception as exc:
+        raise RuntimeError(
+            f"Codex could not list its models ({exc}). Codex writes to ~/.codex while "
+            "it starts, so run this with access outside any sandbox."
+        ) from exc
     finally:
         await client.close()
 

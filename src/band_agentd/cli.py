@@ -313,3 +313,6 @@ def logging_config() -> None:
         level=os.getenv("LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # One line per Band API request otherwise buries agent events and errors.
+    for noisy in ("httpx", "httpcore", "websockets"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
